@@ -115,7 +115,7 @@ public class Entity {
             return null;
         }
 
-        return getUriForFile(context, "org.mokee.warpshare.files", file);
+        return getUriForFile(context, context.getPackageName() + ".FileProvider", file);
     }
 
     public boolean ok() {

@@ -61,8 +61,8 @@ public class CertificateManager {
     private void initServerSSLContext2(Context context) {
         try {
             InputStream inputStream = context.getAssets().open("airdrop.bks");
-            // 选择keystore的储存类型，andorid只支持BKS
-            KeyStore keyStore = KeyStore. getInstance("BKS");
+            // Load BKS keystore bundled with app
+            KeyStore keyStore = KeyStore.getInstance("BKS");
             keyStore.load(inputStream, KEYSTORE_PWD.toCharArray());
 
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(
@@ -72,12 +72,18 @@ public class CertificateManager {
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(keyStore);
 
-            //选择安全协议的版本
             SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(kmf.getKeyManagers(),new TrustManager[]{new TrustAllCerts()}, null);
+            sslContext.init(kmf.getKeyManagers(), new TrustManager[]{new TrustAllCerts()}, new SecureRandom());
             mServerSSlContext = sslContext;
         } catch (Exception ex) {
-            ex.printStackTrace();
+            android.util.Log.e("CertificateManager", "Failed loading airdrop.bks keystore, creating fallback TLS context", ex);
+            try {
+                SSLContext fallback = SSLContext.getInstance("TLS");
+                fallback.init(null, new TrustManager[]{new TrustAllCerts()}, new SecureRandom());
+                mServerSSlContext = fallback;
+            } catch (Exception e) {
+                android.util.Log.e("CertificateManager", "Failed creating fallback SSLContext", e);
+            }
         }
     }
 

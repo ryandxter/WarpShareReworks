@@ -263,7 +263,12 @@ public class ShareBottomSheetFragment extends BottomSheetDialogFragment
             return true;
         }
 
-        final boolean granted = mParent.checkSelfPermission(WRITE_EXTERNAL_STORAGE) == PERMISSION_GRANTED;
+        final boolean granted;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            granted = mParent.checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == PERMISSION_GRANTED;
+        } else {
+            granted = mParent.checkSelfPermission(WRITE_EXTERNAL_STORAGE) == PERMISSION_GRANTED;
+        }
         final boolean ready = mAirDropManager.ready() == STATUS_OK;
         if (!granted || !ready) {
             mIsInSetup = true;

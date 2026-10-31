@@ -41,8 +41,10 @@ class AirDropNsdController {
 
     private static final String SERVICE_TYPE = "_airdrop._tcp.local.";
 
-    private static final int FLAG_SUPPORTS_MIXED_TYPES = 0x08;
-    private static final int FLAG_SUPPORTS_DISCOVER_MAYBE = 0x80;
+    // Modern AirDrop compatibility flags: 0x3FB = 1019
+    // SUPPORTS_URL (0x01) | SUPPORTS_DVZIP (0x02) | SUPPORTS_PIPELINING (0x04) | SUPPORTS_MIXED_TYPES (0x08)
+    // | SUPPORTS_IRIS (0x40) | SUPPORTS_DISCOVER_MAYBE (0x80) | SUPPORTS_ASSET_BUNDLE (0x200)
+    private static final int FLAGS_MODERN = 1019;
 
     private final WifiManager.MulticastLock mMulticastLock;
     private final AirDropConfigManager mConfigManager;
@@ -133,8 +135,8 @@ class AirDropNsdController {
             createJmdns(address);
 
             final Map<String, String> props = new HashMap<>();
-            props.put("flags", Integer.toString(
-                    FLAG_SUPPORTS_MIXED_TYPES | FLAG_SUPPORTS_DISCOVER_MAYBE));
+            props.put("flags", Integer.toString(FLAGS_MODERN));
+            props.put("node", mConfigManager.getId());
 
             final ServiceInfo serviceInfo = ServiceInfo.create(SERVICE_TYPE,
                     mConfigManager.getId(), port, 0, 0, props);

@@ -29,7 +29,11 @@
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /> <!-- Required only if your app targets Android 13. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" tools:targetApi="33" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" /> <!-- Required to maintain app compatibility. -->
@@ -104,7 +108,9 @@
 
         <service
             android:name=".ReceiverService"
-            android:enabled="false" />
+            android:enabled="false"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|dataSync" />
 
         <receiver
             android:name=".TriggerReceiver"

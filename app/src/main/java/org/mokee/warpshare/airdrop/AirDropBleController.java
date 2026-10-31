@@ -182,8 +182,13 @@ class AirDropBleController {
         }
 
         final List<ScanFilter> filters = new ArrayList<>();
+        // Match Apple Continuity Type 0x05 (AirDrop) with 1-byte mask to accept any contact hash/salt
         filters.add(new ScanFilter.Builder()
-                .setManufacturerData(MANUFACTURER_ID, MANUFACTURER_DATA, MANUFACTURER_DATA)
+                .setManufacturerData(MANUFACTURER_ID, new byte[]{0x05}, new byte[]{(byte) 0xFF})
+                .build());
+        // Match Apple Continuity Type 0x10 (Nearby Action / Share Sheet proximity)
+        filters.add(new ScanFilter.Builder()
+                .setManufacturerData(MANUFACTURER_ID, new byte[]{0x10}, new byte[]{(byte) 0xFF})
                 .build());
 
         try {

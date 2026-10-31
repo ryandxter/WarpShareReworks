@@ -19,6 +19,7 @@ package org.mokee.warpshare;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
+import android.os.Build;
 
 abstract class SelfBroadcastReceiver extends BroadcastReceiver {
 
@@ -37,7 +38,11 @@ abstract class SelfBroadcastReceiver extends BroadcastReceiver {
     void register(Context context) {
         synchronized (mLock) {
             if (!mRegistered) {
-                context.registerReceiver(this, mIntentFilter);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(this, mIntentFilter, Context.RECEIVER_EXPORTED);
+                } else {
+                    context.registerReceiver(this, mIntentFilter);
+                }
                 mRegistered = true;
             }
         }

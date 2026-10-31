@@ -61,10 +61,20 @@ class AirDropTypes {
                 return "image/png";
             case "public.image":
                 return "image/*";
+            case "public.audio":
             case "public/audio":
                 return "audio/*";
+            case "public.video":
+            case "public.movie":
             case "public/video":
                 return "video/*";
+            case "public.plain-text":
+            case "public.text":
+                return "text/plain";
+            case "com.adobe.pdf":
+                return "application/pdf";
+            case "public.zip-archive":
+                return "application/zip";
             default:
                 return "*/*";
         }

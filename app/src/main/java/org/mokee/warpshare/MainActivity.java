@@ -247,11 +247,21 @@ public class MainActivity extends AppCompatActivity implements DiscoverListener 
         }
 
         final boolean granted;
+        final boolean storageGranted;
+        final boolean btGranted;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            granted = (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PERMISSION_GRANTED) && (checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE) == PERMISSION_GRANTED);
+            storageGranted = checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PERMISSION_GRANTED;
         } else {
-            granted = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PERMISSION_GRANTED;
+            storageGranted = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PERMISSION_GRANTED;
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            btGranted = (checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE) == PERMISSION_GRANTED)
+                    && (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PERMISSION_GRANTED)
+                    && (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PERMISSION_GRANTED);
+        } else {
+            btGranted = true;
+        }
+        granted = storageGranted && btGranted;
 
         final boolean ready = mAirDropManager.ready() == STATUS_OK;
         if (!granted || !ready) {

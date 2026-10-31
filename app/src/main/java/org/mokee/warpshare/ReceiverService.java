@@ -22,8 +22,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
@@ -109,6 +111,9 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
 
         if (!configManager.isDiscoverable()) {
             context.stopService(new Intent(context, ReceiverService.class));
+        } else {
+            androidx.core.content.ContextCompat.startForegroundService(
+                    context, new Intent(context, ReceiverService.class));
         }
     }
 
@@ -146,7 +151,7 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
 
         mNotificationManager.createNotificationChannel(transferChannel);
 
-        startForeground(NOTIFICATION_ACTIVE, getNotificationBuilder(NOTIFICATION_CHANNEL_SERVICE, CATEGORY_SERVICE)
+        final Notification activeNotification = getNotificationBuilder(NOTIFICATION_CHANNEL_SERVICE, CATEGORY_SERVICE)
                 .setContentTitle(getString(R.string.notif_recv_active_title))
                 .setContentText(getString(R.string.notif_recv_active_desc))
                 .addAction(new Notification.Action.Builder(null,
@@ -156,9 +161,24 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
                                 PendingIntent.FLAG_MUTABLE))
                         .build())
                 .setOngoing(true)
-                .build());
+                .build();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ACTIVE, activeNotification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        } else {
+            startForeground(NOTIFICATION_ACTIVE, activeNotification);
+        }
 
         stopIfNotReady();
+
+        // If user configured discoverable mode, start AirDrop server & mDNS immediately
+        final ConfigManager configManager = new ConfigManager(this);
+        if (configManager.isDiscoverable() && mAirDropManager.ready() == STATUS_OK) {
+            Log.d(TAG, "Configured discoverable: starting AirDrop server immediately");
+            mAirDropManager.startDiscoverable(this);
+            mRunning = true;
+        }
     }
 
     @Override
@@ -219,7 +239,8 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
                 }
             }
         }
-        if (mRunning && mDevices.isEmpty()) {
+        final boolean keepAlive = new ConfigManager(this).isDiscoverable();
+        if (mRunning && mDevices.isEmpty() && !keepAlive) {
             Log.d(TAG, "Peers lost, sleep");
 
             mAirDropManager.stopDiscoverable();
@@ -227,7 +248,7 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
             stopSelf();
 
             mRunning = false;
-        } else if (!mRunning && !mDevices.isEmpty()) {
+        } else if (!mRunning && (!mDevices.isEmpty() || keepAlive)) {
             Log.d(TAG, "Peers discovering");
 
             if (mAirDropManager.ready() != STATUS_OK) {
