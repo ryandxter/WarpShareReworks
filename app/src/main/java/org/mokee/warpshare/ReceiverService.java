@@ -176,7 +176,18 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         // If user configured discoverable mode, start AirDrop server & mDNS immediately
         mWebDropServer = new org.mokee.warpshare.webdrop.WebDropServer(this, new org.mokee.warpshare.webdrop.WebDropServer.FileReceiveListener() {
             @Override
+            public void onReceiveStart(String fileName, long totalBytes, String remoteIp) {
+                showWebDropProgressNotification(fileName, 0, totalBytes, remoteIp);
+            }
+
+            @Override
+            public void onReceiveProgress(String fileName, int percent, long bytesReceived, long totalBytes) {
+                showWebDropProgressNotification(fileName, percent, totalBytes, "Apple Device");
+            }
+
+            @Override
             public void onFileReceived(File file, String remoteIp) {
+                cancelWebDropProgressNotification(file.getName());
                 showWebDropNotification(file, remoteIp);
             }
 
@@ -581,18 +592,46 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         return generalType + "/" + generalSubtype;
     }
 
+    private void showWebDropProgressNotification(String fileName, int percent, long totalBytes, String remoteIp) {
+        Notification.Builder builder = getNotificationBuilder(NOTIFICATION_CHANNEL_TRANSFER, Notification.CATEGORY_PROGRESS)
+                .setContentTitle("Menerima: " + fileName)
+                .setContentText((totalBytes > 0 ? (percent + "% - ") : "") + "Dari " + remoteIp)
+                .setOngoing(true);
+        if (totalBytes > 0) {
+            builder.setProgress(100, Math.min(100, percent), false);
+        } else {
+            builder.setProgress(0, 0, true);
+        }
+        mNotificationManager.notify("webdrop_" + fileName, NOTIFICATION_TRANSFER, builder.build());
+    }
+
+    private void cancelWebDropProgressNotification(String fileName) {
+        mNotificationManager.cancel("webdrop_" + fileName, NOTIFICATION_TRANSFER);
+    }
+
     private void showWebDropNotification(File file, String remoteIp) {
-        final Uri uri = getUriForReceivedFile(file.getName());
+        Uri uri = null;
+        try {
+            uri = getUriForFile(this, BuildConfig.APPLICATION_ID + ".FileProvider", file);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed getting uri for file", e);
+            uri = getUriForReceivedFile(file.getName());
+        }
+
         final Intent shareIntent = new Intent(Intent.ACTION_SEND);
         shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
         shareIntent.setType("*/*");
         shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
+        Intent openIntent = new Intent(Intent.ACTION_VIEW);
+        openIntent.setDataAndType(uri, "*/*");
+        openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+
         final Notification notification = getNotificationBuilder(NOTIFICATION_CHANNEL_TRANSFER, CATEGORY_STATUS)
                 .setContentTitle("File Diterima dari Apple Device")
                 .setContentText(file.getName() + " (" + remoteIp + ")")
                 .setContentIntent(PendingIntent.getActivity(this, 0,
-                        new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        openIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
                 .addAction(new Notification.Action.Builder(null,
                         getString(R.string.notif_recv_transfer_done_share),

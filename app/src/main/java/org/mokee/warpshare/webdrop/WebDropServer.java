@@ -17,15 +17,16 @@
 package org.mokee.warpshare.webdrop;
 
 import android.content.Context;
-import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Environment;
 import android.util.Log;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.koushikdutta.async.AsyncNetworkSocket;
+import com.koushikdutta.async.AsyncServer;
 import com.koushikdutta.async.DataEmitter;
+import com.koushikdutta.async.http.body.AsyncHttpRequestBody;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
@@ -33,6 +34,7 @@ import com.koushikdutta.async.http.server.HttpServerRequestCallback;
 import com.koushikdutta.async.http.server.UnknownRequestBody;
 
 import org.mokee.warpshare.ConfigManager;
+import org.mokee.warpshare.StorageUtil;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -53,6 +55,8 @@ public class WebDropServer {
     private FileReceiveListener mListener;
 
     public interface FileReceiveListener {
+        default void onReceiveStart(String fileName, long totalBytes, String remoteIp) {}
+        default void onReceiveProgress(String fileName, int percent, long bytesReceived, long totalBytes) {}
         void onFileReceived(File file, String remoteIp);
         void onReceiveError(String error);
     }
@@ -76,7 +80,12 @@ public class WebDropServer {
                     InputStream is = mContext.getAssets().open("webdrop/index.html");
                     int size = is.available();
                     byte[] buffer = new byte[size];
-                    is.read(buffer);
+                    int read = 0;
+                    while (read < size) {
+                        int r = is.read(buffer, read, size - read);
+                        if (r == -1) break;
+                        read += r;
+                    }
                     is.close();
                     String html = new String(buffer, StandardCharsets.UTF_8);
                     response.setContentType("text/html; charset=utf-8");
@@ -102,7 +111,7 @@ public class WebDropServer {
             }
         });
 
-        // 3. GET /WarpShare.shortcut -> Serve signed Apple Shortcut for iOS ShareSheet
+        // 3. GET /WarpShare.shortcut -> Serve signed Apple Shortcut
         mServer.get("/WarpShare.shortcut", new HttpServerRequestCallback() {
             @Override
             public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
@@ -127,16 +136,58 @@ public class WebDropServer {
             }
         });
 
-        // 3. POST /api/upload -> Direct streaming file receiver
+        // 4. GET /api/files -> Return list of received files
+        mServer.get("/api/files", new HttpServerRequestCallback() {
+            @Override
+            public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
+                File dir = StorageUtil.getTargetDirectory(mContext);
+                JsonArray array = new JsonArray();
+                if (dir.exists()) {
+                    File[] files = dir.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            if (f.isFile()) {
+                                JsonObject obj = new JsonObject();
+                                obj.addProperty("name", f.getName());
+                                obj.addProperty("size", f.length());
+                                obj.addProperty("lastModified", f.lastModified());
+                                array.add(obj);
+                            }
+                        }
+                    }
+                }
+                response.setContentType("application/json; charset=utf-8");
+                response.send(array.toString());
+            }
+        });
+
+        // 5. GET /api/download/.* -> Stream file back to Mac/iOS
+        mServer.get("/api/download/.*", new HttpServerRequestCallback() {
+            @Override
+            public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
+                String path = request.getPath();
+                String name = path.replace("/api/download/", "");
+                try {
+                    name = URLDecoder.decode(name.replace("+", "%2B"), "UTF-8");
+                } catch (Exception ignored) {}
+                File file = StorageUtil.getTargetFile(mContext, name);
+                if (file.exists() && file.isFile()) {
+                    response.sendFile(file);
+                } else {
+                    response.code(404).send("File not found");
+                }
+            }
+        });
+
+        // 6. POST /api/upload -> Direct streaming file receiver with live progress
         mServer.post("/api/upload", new HttpServerRequestCallback() {
             @Override
             public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
                 String fileName = "received_file_" + System.currentTimeMillis();
                 try {
-                    Uri uri = Uri.parse(request.getPath());
                     String nameParam = request.getQuery().getString("name");
                     if (nameParam != null && !nameParam.trim().isEmpty()) {
-                        fileName = URLDecoder.decode(nameParam, "UTF-8");
+                        fileName = URLDecoder.decode(nameParam.replace("+", "%2B"), "UTF-8");
                     }
                 } catch (Exception ignored) {
                 }
@@ -144,19 +195,29 @@ public class WebDropServer {
                 // Sanitize file name
                 fileName = new File(fileName).getName();
 
-                File targetDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WarpShare");
-                if (!targetDir.exists()) {
-                    targetDir.mkdirs();
-                }
-                if (!targetDir.canWrite()) {
-                    targetDir = mContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                    if (targetDir != null && !targetDir.exists()) {
-                        targetDir.mkdirs();
-                    }
-                }
-
-                final File outputFile = new File(targetDir, fileName);
+                final File outputFile = StorageUtil.getTargetFile(mContext, fileName);
                 final String finalFileName = fileName;
+
+                String remoteIp = "Apple Device";
+                try {
+                    if (request.getSocket() instanceof AsyncNetworkSocket) {
+                        remoteIp = ((AsyncNetworkSocket) request.getSocket()).getRemoteAddress().getAddress().getHostAddress();
+                    }
+                } catch (Exception ignored) {}
+                final String finalRemoteIp = remoteIp;
+
+                long totalBytes = -1;
+                try {
+                    String cl = request.getHeaders().get("Content-Length");
+                    if (cl != null) {
+                        totalBytes = Long.parseLong(cl.trim());
+                    }
+                } catch (Exception ignored) {}
+                final long finalTotalBytes = totalBytes;
+
+                if (mListener != null) {
+                    mListener.onReceiveStart(finalFileName, finalTotalBytes, finalRemoteIp);
+                }
 
                 try {
                     final FileOutputStream fos = new FileOutputStream(outputFile);
@@ -170,11 +231,24 @@ public class WebDropServer {
                         emitter = (DataEmitter) request;
                     }
 
+                    final long[] bytesReceived = {0};
+                    final long[] lastProgressUpdate = {0};
+
                     if (emitter != null) {
                         emitter.setDataCallback((emitter1, bb) -> {
                             try {
                                 byte[] bytes = bb.getAllByteArray();
                                 fos.write(bytes);
+                                bytesReceived[0] += bytes.length;
+
+                                long now = System.currentTimeMillis();
+                                if (now - lastProgressUpdate[0] > 300 || (finalTotalBytes > 0 && bytesReceived[0] == finalTotalBytes)) {
+                                    lastProgressUpdate[0] = now;
+                                    int percent = finalTotalBytes > 0 ? (int)((bytesReceived[0] * 100) / finalTotalBytes) : 0;
+                                    if (mListener != null) {
+                                        mListener.onReceiveProgress(finalFileName, percent, bytesReceived[0], finalTotalBytes);
+                                    }
+                                }
                             } catch (IOException e) {
                                 Log.e(TAG, "Error writing uploaded chunk", e);
                             }
@@ -197,9 +271,8 @@ public class WebDropServer {
                         }
 
                         Log.d(TAG, "File received successfully: " + outputFile.getAbsolutePath());
-                        // Trigger MediaScanner so it instantly appears in Android Gallery & Downloads
-                        MediaScannerConnection.scanFile(mContext,
-                                new String[]{outputFile.getAbsolutePath()}, null, null);
+                        // Index file into Android system MediaStore & Downloads
+                        StorageUtil.indexFile(mContext, outputFile);
 
                         JsonObject ok = new JsonObject();
                         ok.addProperty("status", "ok");
@@ -209,43 +282,40 @@ public class WebDropServer {
                         response.send(ok.toString());
 
                         if (mListener != null) {
-                            String remoteIp = "Apple Device";
-                            try {
-                                if (request.getSocket() instanceof AsyncNetworkSocket) {
-                                    remoteIp = ((AsyncNetworkSocket) request.getSocket()).getRemoteAddress().getAddress().getHostAddress();
-                                }
-                            } catch (Exception ignored) {}
-                            mListener.onFileReceived(outputFile, remoteIp);
+                            mListener.onFileReceived(outputFile, finalRemoteIp);
                         }
                     });
 
                 } catch (Exception e) {
                     Log.e(TAG, "Error creating output file for upload", e);
                     response.code(500).send("Internal Server Error: " + e.getMessage());
+                    if (mListener != null) mListener.onReceiveError(e.getMessage());
                 }
             }
         });
 
         try {
-            mServer.listen(com.koushikdutta.async.AsyncServer.getDefault(), port);
+            mServer.listen(AsyncServer.getDefault(), port);
             mRunning = true;
             Log.d(TAG, "WebDropServer started listening on port " + port);
         } catch (Exception e) {
-            Log.w(TAG, "Port " + port + " error or already in use: " + e.getMessage());
+            Log.e(TAG, "Failed starting WebDropServer on port " + port, e);
         }
     }
 
     public synchronized void stop() {
-        if (!mRunning) return;
         if (mServer != null) {
-            mServer.stop();
+            try {
+                mServer.stop();
+            } catch (Exception ignored) {
+            }
             mServer = null;
         }
         mRunning = false;
         Log.d(TAG, "WebDropServer stopped");
     }
 
-    public synchronized boolean isRunning() {
+    public boolean isRunning() {
         return mRunning;
     }
 }

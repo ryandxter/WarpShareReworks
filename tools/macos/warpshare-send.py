@@ -107,23 +107,23 @@ def discover_ip():
 
 def upload_file(ip, filepath):
     filename = os.path.basename(filepath)
-    encoded_name = urllib.parse.quote(filename)
+    encoded_name = urllib.parse.quote(filename, safe='')
     url = f"http://{ip}:{PORT}/api/upload?name={encoded_name}"
     
-    file_size = os.path.getsize(filepath)
-    with open(filepath, "rb") as f:
-        file_bytes = f.read()
-
-    req = urllib.request.Request(
-        url,
-        data=file_bytes,
-        headers={"Content-Type": "application/octet-stream"}
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        if resp.status == 200:
-            return True
-        else:
-            return False
+    # Use native macOS /usr/bin/curl for zero-memory kernel streaming of any file size
+    res = subprocess.run([
+        "/usr/bin/curl",
+        "-s",
+        "-S",
+        "-o", "/dev/null",
+        "-w", "%{http_code}",
+        "--connect-timeout", "3",
+        "-H", "Content-Type: application/octet-stream",
+        "--data-binary", f"@{filepath}",
+        url
+    ], capture_output=True, text=True, check=False)
+    
+    return res.stdout.strip() == "200"
 
 def main():
     files = sys.argv[1:]
