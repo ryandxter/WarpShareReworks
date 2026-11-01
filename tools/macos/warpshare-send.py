@@ -111,6 +111,7 @@ def upload_file(ip, filepath):
     url = f"http://{ip}:{PORT}/api/upload?name={encoded_name}"
     
     # Use native macOS /usr/bin/curl for zero-memory kernel streaming of any file size
+    # Provide triple-redundant filename headers (URL query, X-File-Name, Content-Disposition)
     res = subprocess.run([
         "/usr/bin/curl",
         "-s",
@@ -119,6 +120,8 @@ def upload_file(ip, filepath):
         "-w", "%{http_code}",
         "--connect-timeout", "3",
         "-H", "Content-Type: application/octet-stream",
+        "-H", f"X-File-Name: {encoded_name}",
+        "-H", f"Content-Disposition: attachment; filename=\"{filename}\"",
         "--data-binary", f"@{filepath}",
         url
     ], capture_output=True, text=True, check=False)

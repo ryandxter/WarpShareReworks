@@ -42,6 +42,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WebDropServer {
 
@@ -183,20 +185,53 @@ public class WebDropServer {
         mServer.post("/api/upload", new HttpServerRequestCallback() {
             @Override
             public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
-                String fileName = "received_file_" + System.currentTimeMillis();
+                String fileName = null;
+
+                // 1. Try query parameter ?name=
                 try {
                     String nameParam = request.getQuery().getString("name");
                     if (nameParam != null && !nameParam.trim().isEmpty()) {
                         fileName = URLDecoder.decode(nameParam.replace("+", "%2B"), "UTF-8");
                     }
-                } catch (Exception ignored) {
+                } catch (Exception ignored) {}
+
+                // 2. Try custom X-File-Name header
+                if (fileName == null || fileName.trim().isEmpty()) {
+                    String xHeader = request.getHeaders().get("X-File-Name");
+                    if (xHeader != null && !xHeader.trim().isEmpty()) {
+                        try {
+                            fileName = URLDecoder.decode(xHeader.replace("+", "%2B"), "UTF-8");
+                        } catch (Exception ignored) {
+                            fileName = xHeader;
+                        }
+                    }
                 }
 
-                // Sanitize file name
-                fileName = new File(fileName).getName();
+                // 3. Try Content-Disposition header
+                if (fileName == null || fileName.trim().isEmpty()) {
+                    String cd = request.getHeaders().get("Content-Disposition");
+                    if (cd != null) {
+                        Matcher m = Pattern.compile("filename\\*?=(?:UTF-8''|\")?([^;\"\\r\\n]+)\"?").matcher(cd);
+                        if (m.find()) {
+                            try {
+                                fileName = URLDecoder.decode(m.group(1).replace("+", "%2B"), "UTF-8");
+                            } catch (Exception ignored) {
+                                fileName = m.group(1);
+                            }
+                        }
+                    }
+                }
 
-                final File outputFile = StorageUtil.getTargetFile(mContext, fileName);
-                final String finalFileName = fileName;
+                // 4. Fallback if no filename provided
+                if (fileName == null || fileName.trim().isEmpty()) {
+                    String ct = request.getHeaders().get("Content-Type");
+                    String ext = StorageUtil.inferExtension(ct, null);
+                    fileName = "received_file_" + System.currentTimeMillis() + ext;
+                }
+
+                // Clean and ensure unique destination file without collisions
+                final File outputFile = StorageUtil.getUniqueTargetFile(mContext, fileName);
+                final String finalFileName = outputFile.getName();
 
                 String remoteIp = "Apple Device";
                 try {

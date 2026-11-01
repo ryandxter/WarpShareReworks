@@ -52,8 +52,77 @@ public class StorageUtil {
     }
 
     public static File getTargetFile(Context context, String fileName) {
-        String cleanName = new File(fileName).getName();
+        String cleanName = sanitizeFileName(fileName);
         return new File(getTargetDirectory(context), cleanName);
+    }
+
+    public static File getUniqueTargetFile(Context context, String fileName) {
+        String cleanName = sanitizeFileName(fileName);
+        File dir = getTargetDirectory(context);
+        File file = new File(dir, cleanName);
+        if (!file.exists()) {
+            return file;
+        }
+
+        String baseName = cleanName;
+        String extension = "";
+        int dotIndex = cleanName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            baseName = cleanName.substring(0, dotIndex);
+            extension = cleanName.substring(dotIndex);
+        }
+
+        int count = 1;
+        while (file.exists()) {
+            file = new File(dir, baseName + " (" + count + ")" + extension);
+            count++;
+        }
+        return file;
+    }
+
+    public static String sanitizeFileName(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return "file_" + System.currentTimeMillis();
+        }
+        // Extract plain filename without path traversal
+        String name = new File(fileName).getName();
+        // Remove illegal filesystem characters on Android/FAT32 while strictly preserving '+', spaces, and unicode
+        name = name.replaceAll("[/\\\\:*?\"<>|]", "_").trim();
+        if (name.isEmpty()) {
+            return "file_" + System.currentTimeMillis();
+        }
+        return name;
+    }
+
+    public static String inferExtension(String contentType, byte[] sample) {
+        if (contentType != null) {
+            String mime = contentType.split(";")[0].trim().toLowerCase();
+            String ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime);
+            if (ext != null && !ext.isEmpty()) {
+                return "." + ext;
+            }
+        }
+        if (sample != null && sample.length >= 4) {
+            if (sample[0] == (byte) 0x89 && sample[1] == (byte) 0x50 && sample[2] == (byte) 0x4E && sample[3] == (byte) 0x47) {
+                return ".png";
+            }
+            if (sample[0] == (byte) 0xFF && sample[1] == (byte) 0xD8 && sample[2] == (byte) 0xFF) {
+                return ".jpg";
+            }
+            if (sample[0] == (byte) 0x47 && sample[1] == (byte) 0x49 && sample[2] == (byte) 0x46) {
+                return ".gif";
+            }
+            if (sample[0] == (byte) 0x25 && sample[1] == (byte) 0x50 && sample[2] == (byte) 0x44 && sample[3] == (byte) 0x46) {
+                return ".pdf";
+            }
+            if (sample[0] == (byte) 0x49 && sample[1] == (byte) 0x44 && sample[2] == (byte) 0x33) {
+                return ".mp3";
+            }
+            if (sample[0] == (byte) 0xFF && (sample[1] == (byte) 0xFB || sample[1] == (byte) 0xF3)) {
+                return ".mp3";
+            }
+        }
+        return "";
     }
 
     public static void indexFile(Context context, File file) {
