@@ -76,6 +76,7 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
 
     private NotificationManager mNotificationManager;
     private AirDropManager mAirDropManager;
+    private org.mokee.warpshare.webdrop.WebDropServer mWebDropServer;
 
     private final WifiStateMonitor mWifiStateMonitor = new WifiStateMonitor() {
         @Override
@@ -173,10 +174,23 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         stopIfNotReady();
 
         // If user configured discoverable mode, start AirDrop server & mDNS immediately
+        mWebDropServer = new org.mokee.warpshare.webdrop.WebDropServer(this, new org.mokee.warpshare.webdrop.WebDropServer.FileReceiveListener() {
+            @Override
+            public void onFileReceived(File file, String remoteIp) {
+                showWebDropNotification(file, remoteIp);
+            }
+
+            @Override
+            public void onReceiveError(String error) {
+                Log.e(TAG, "WebDrop receive error: " + error);
+            }
+        });
+
         final ConfigManager configManager = new ConfigManager(this);
         if (configManager.isDiscoverable() && mAirDropManager.ready() == STATUS_OK) {
             Log.d(TAG, "Configured discoverable: starting AirDrop server immediately");
             mAirDropManager.startDiscoverable(this);
+            mWebDropServer.start(org.mokee.warpshare.webdrop.WebDropServer.DEFAULT_PORT);
             mRunning = true;
         }
     }
@@ -186,6 +200,9 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         super.onDestroy();
         Log.d(TAG, "onDestroy");
         mAirDropManager.destroy();
+        if (mWebDropServer != null) {
+            mWebDropServer.stop();
+        }
 
         mWifiStateMonitor.unregister(this);
         mBluetoothStateMonitor.unregister(this);
@@ -244,6 +261,9 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
             Log.d(TAG, "Peers lost, sleep");
 
             mAirDropManager.stopDiscoverable();
+            if (mWebDropServer != null) {
+                mWebDropServer.stop();
+            }
 
             stopSelf();
 
@@ -258,6 +278,9 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
             }
 
             mAirDropManager.startDiscoverable(this);
+            if (mWebDropServer != null) {
+                mWebDropServer.start(org.mokee.warpshare.webdrop.WebDropServer.DEFAULT_PORT);
+            }
 
             mRunning = true;
         }
@@ -556,6 +579,30 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         }
 
         return generalType + "/" + generalSubtype;
+    }
+
+    private void showWebDropNotification(File file, String remoteIp) {
+        final Uri uri = getUriForReceivedFile(file.getName());
+        final Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+        shareIntent.setType("*/*");
+        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        final Notification notification = getNotificationBuilder(NOTIFICATION_CHANNEL_TRANSFER, CATEGORY_STATUS)
+                .setContentTitle("File Diterima dari Apple Device")
+                .setContentText(file.getName() + " (" + remoteIp + ")")
+                .setContentIntent(PendingIntent.getActivity(this, 0,
+                        new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+                .addAction(new Notification.Action.Builder(null,
+                        getString(R.string.notif_recv_transfer_done_share),
+                        PendingIntent.getActivity(this, 0,
+                                Intent.createChooser(shareIntent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+                        .build())
+                .build();
+
+        mNotificationManager.notify(file.getName().hashCode(), notification);
     }
 
 }

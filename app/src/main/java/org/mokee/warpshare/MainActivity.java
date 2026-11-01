@@ -133,6 +133,14 @@ public class MainActivity extends AppCompatActivity implements DiscoverListener 
         final RecyclerView peersView = findViewById(R.id.peers);
         peersView.setAdapter(mAdapter);
 
+        final View cardWebDrop = findViewById(R.id.card_webdrop);
+        if (cardWebDrop != null) {
+            cardWebDrop.setOnClickListener(v -> {
+                org.mokee.warpshare.webdrop.WebDropBottomSheet sheet = new org.mokee.warpshare.webdrop.WebDropBottomSheet();
+                sheet.show(getSupportFragmentManager(), org.mokee.warpshare.webdrop.WebDropBottomSheet.TAG);
+            });
+        }
+
         final Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
     }
@@ -153,6 +161,10 @@ public class MainActivity extends AppCompatActivity implements DiscoverListener 
 
         if (setupIfNeeded()) {
             return;
+        }
+
+        if (new ConfigManager(this).isDiscoverable()) {
+            ReceiverService.updateDiscoverability(this);
         }
 
         if (!mIsDiscovering) {

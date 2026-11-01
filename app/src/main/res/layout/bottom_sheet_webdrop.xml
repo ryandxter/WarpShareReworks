@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center_horizontal">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:background="#D1D1D6"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Apple WebDrop Hub"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Terima foto &amp; file dari iPhone, iPad, dan Mac"
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="16dp" />
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp"
+        android:layout_marginBottom="16dp">
+
+        <ImageView
+            android:id="@+id/qr_code_image"
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:scaleType="fitCenter"
+            android:padding="12dp"
+            tools:srcCompat="@android:drawable/ic_menu_camera" />
+
+    </androidx.cardview.widget.CardView>
+
+    <TextView
+        android:id="@+id/portal_url_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="http://192.168.18.13:8888"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#007AFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="8dp" />
+
+    <TextView
+        android:id="@+id/webdrop_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Arahkan kamera iPhone / buka Safari di Mac"
+        android:textSize="13sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:gravity="center"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="20dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_copy_url"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="Salin Tautan" />
+
+        <Button
+            android:id="@+id/btn_open_downloads"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Lihat Unduhan" />
+
+    </LinearLayout>
+
+</LinearLayout>
