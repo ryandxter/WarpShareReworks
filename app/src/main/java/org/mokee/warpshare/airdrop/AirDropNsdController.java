@@ -106,7 +106,7 @@ class AirDropNsdController {
         // TODO: should handle address change
         if (mJmdns == null) {
             try {
-                mJmdns = JmDNS.create(address);
+                mJmdns = JmDNS.create(address, "warpshare");
             } catch (IOException e) {
                 throw new RuntimeException("Failed creating JmDNS instance", e);
             }

@@ -43,7 +43,17 @@ def check_ip(ip):
     return None
 
 def discover_ip():
-    # 1. Check cache
+    # 1. Resolve zero-config mDNS hostname (warpshare.local) directly to IPv4 (3ms)
+    try:
+        resolved_ip = socket.gethostbyname("warpshare.local")
+        if resolved_ip and check_ip(resolved_ip):
+            with open(CACHE_FILE, "w") as f:
+                f.write(resolved_ip)
+            return resolved_ip
+    except Exception:
+        pass
+
+    # 2. Check cache
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r") as f:
@@ -53,7 +63,7 @@ def discover_ip():
         except Exception:
             pass
 
-    # 2. Try mDNS discovery via dns-sd
+    # 3. Try mDNS discovery via dns-sd browsing
     try:
         proc = subprocess.Popen(["dns-sd", "-B", "_airdrop._tcp", "."], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         time.sleep(1.0)
