@@ -38,6 +38,7 @@ public class WarpShareApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        com.koushikdutta.async.Util.SUPRESS_DEBUG_EXCEPTIONS = true;
         application = this;
         mCertificateManager = new CertificateManager(this);
     }

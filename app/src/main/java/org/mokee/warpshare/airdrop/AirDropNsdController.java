@@ -132,6 +132,9 @@ class AirDropNsdController {
 
     void publish(final InetAddress address, final int port) {
         mNetworkingHandler.post(() -> {
+            if (!mMulticastLock.isHeld()) {
+                mMulticastLock.acquire();
+            }
             createJmdns(address);
 
             final Map<String, String> props = new HashMap<>();
@@ -150,7 +153,14 @@ class AirDropNsdController {
     }
 
     void unpublish() {
-        mNetworkingHandler.post(() -> mJmdns.unregisterAllServices());
+        mNetworkingHandler.post(() -> {
+            if (mJmdns != null) {
+                mJmdns.unregisterAllServices();
+            }
+            if (mMulticastLock.isHeld()) {
+                mMulticastLock.release();
+            }
+        });
     }
 
     private void handleServiceLost(ServiceInfo serviceInfo) {

@@ -170,10 +170,12 @@ public class AirDropManager implements
         final int port = mServer.start(mWlanController.getLocalAddress().getHostAddress());
 
         mNsdController.publish(mWlanController.getLocalAddress(), port);
+        mBleController.triggerDiscoverable();
     }
 
     public void stopDiscoverable() {
         mNsdController.unpublish();
+        mBleController.stop();
         mServer.stop();
     }
 

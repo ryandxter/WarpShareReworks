@@ -72,13 +72,13 @@ public class CertificateManager {
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(keyStore);
 
-            SSLContext sslContext = SSLContext.getInstance("TLS");
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
             sslContext.init(kmf.getKeyManagers(), new TrustManager[]{new TrustAllCerts()}, new SecureRandom());
             mServerSSlContext = sslContext;
         } catch (Exception ex) {
             android.util.Log.e("CertificateManager", "Failed loading airdrop.bks keystore, creating fallback TLS context", ex);
             try {
-                SSLContext fallback = SSLContext.getInstance("TLS");
+                SSLContext fallback = SSLContext.getInstance("TLSv1.2");
                 fallback.init(null, new TrustManager[]{new TrustAllCerts()}, new SecureRandom());
                 mServerSSlContext = fallback;
             } catch (Exception e) {

@@ -209,19 +209,19 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
             final List<ScanResult> results = intent.getParcelableArrayListExtra(EXTRA_LIST_SCAN_RESULT);
             handleScanResult(callbackType, results);
         } else if (ACTION_TRANSFER_ACCEPT.equals(action)) {
-            final Uri data = intent.getData();
-            if (data != null) {
-                handleTransferAccept(data.getPath());
+            final String ip = extractIp(intent);
+            if (ip != null) {
+                handleTransferAccept(ip);
             }
         } else if (ACTION_TRANSFER_REJECT.equals(action)) {
-            final Uri data = intent.getData();
-            if (data != null) {
-                handleTransferReject(data.getPath());
+            final String ip = extractIp(intent);
+            if (ip != null) {
+                handleTransferReject(ip);
             }
         } else if (ACTION_TRANSFER_CANCEL.equals(action)) {
-            final Uri data = intent.getData();
-            if (data != null) {
-                handleTransferCancel(data.getPath());
+            final String ip = extractIp(intent);
+            if (ip != null) {
+                handleTransferCancel(ip);
             }
         }
         return START_STICKY;
@@ -332,21 +332,42 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         mWakeLock.release();
     }
 
+    private File getTargetFile(String fileName) {
+        File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        File target = new File(downloadDir, fileName);
+        try {
+            File parent = target.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+        } catch (Exception ignored) {
+        }
+        return target;
+    }
+
     @Override
     public void onAirDropTransfer(ReceivingSession session, String fileName, InputStream input) {
         Log.d(TAG, "Transferring " + fileName + " from " + session.name);
-//        final String targetFileName = session.getFileName(fileName);
         final String targetFileName = fileName;
+        File file = getTargetFile(targetFileName);
 
-        final File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        final File file = new File(downloadDir, targetFileName);
         try {
             final Source source = Okio.source(input);
-            final BufferedSink sink = Okio.buffer(Okio.sink(file));
+            BufferedSink sink;
+            try {
+                sink = Okio.buffer(Okio.sink(file));
+            } catch (Exception e) {
+                // Fallback to app-specific external files dir if scoped storage rejects direct public downloads
+                Log.w(TAG, "Failed public storage, falling back to app external files dir", e);
+                File fallbackDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (fallbackDir != null && !fallbackDir.exists()) fallbackDir.mkdirs();
+                file = new File(fallbackDir, targetFileName);
+                sink = Okio.buffer(Okio.sink(file));
+            }
             sink.writeAll(source);
             sink.flush();
             sink.close();
-            Log.d(TAG, "Received " + fileName + " as " + targetFileName);
+            Log.d(TAG, "Received " + fileName + " as " + file.getAbsolutePath());
         } catch (IOException e) {
             Log.e(TAG, "Failed writing file to " + file.getAbsolutePath(), e);
         }
@@ -413,13 +434,13 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
                 .setContentIntent(PendingIntent.getActivity(this, 0,
                         new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        PendingIntent.FLAG_UPDATE_CURRENT))
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
                 .addAction(new Notification.Action.Builder(null,
                         getString(R.string.notif_recv_transfer_done_share),
                         PendingIntent.getActivity(this, 0,
                                 Intent.createChooser(shareIntent, null)
                                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                PendingIntent.FLAG_UPDATE_CURRENT))
+                                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
                         .build());
 
         if (session.preview != null) {
@@ -454,11 +475,30 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
         mWakeLock.release();
     }
 
+    private String extractIp(Intent intent) {
+        if (intent == null) return null;
+        if (intent.hasExtra("ip")) {
+            return intent.getStringExtra("ip");
+        }
+        final Uri data = intent.getData();
+        if (data != null) {
+            String ip = data.getAuthority();
+            if (ip != null && !ip.isEmpty()) return ip;
+            ip = data.getPath();
+            if (ip != null && ip.startsWith("/")) {
+                ip = ip.substring(1);
+            }
+            return ip;
+        }
+        return null;
+    }
+
     private PendingIntent getTransferIntent(String action, String ip) {
         return PendingIntent.getForegroundService(this, 0,
                 new Intent(action, null, this, getClass())
-                        .setData(new Uri.Builder().path(ip).build()),
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                        .putExtra("ip", ip)
+                        .setData(new Uri.Builder().scheme("warpshare").authority(ip).build()),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
     }
 
     private Notification.Builder getNotificationBuilder(String channelId, String category) {
@@ -469,11 +509,15 @@ public class ReceiverService extends Service implements AirDropManager.ReceiverL
     }
 
     private Uri getUriForReceivedFile(String fileName) {
-        final File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        final File file = new File(downloadDir, fileName);
-        //return  (this, "org.mokee.warpshare.files", file);
+        File file = getTargetFile(fileName);
+        if (!file.exists()) {
+            File fallbackDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            File fallbackFile = new File(fallbackDir, fileName);
+            if (fallbackFile.exists()) {
+                file = fallbackFile;
+            }
+        }
         return getUriForFile(this, BuildConfig.APPLICATION_ID + ".FileProvider", file);
-
     }
 
     private String getGeneralMimeType(List<String> mimeTypes) {
